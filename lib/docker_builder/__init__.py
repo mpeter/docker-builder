@@ -123,17 +123,24 @@ class Builder(object):
         '''
         Build the container
         '''
-        if not os.path.exists(container):
-            sys.stderr.write('Missing folder %s\n' % container)
-            sys.exit(1)
+        if type(container) is str:
+          container_name = container
+          container_path = container
+        elif type(container) is dict:
+          container_name = container.get('name')
+          container_path = container.get('path')
+
+        if not os.path.exists(container_path):
+          sys.stderr.write('Missing folder %s\n' % container_path)
+          sys.exit(1)
 
         build = [
             'docker',
             'build',
             '--rm=true',
             '--no-cache=%s' % ('true' if self.no_cache else 'false'),
-            '--tag="%s"' % (self.get_tag_prefix(0) + container),
-            container
+            '--tag="%s"' % (self.get_tag_prefix(0) + container_name),
+            container_path
         ]
 
         sys.stdout.write('%s\n' % ' '.join(build))
@@ -149,16 +156,24 @@ class Builder(object):
         '''
         Push the container to the repositories
         '''
+
+        if type(container) is str:
+          container_name = container
+          container_path = container
+        elif type(container) is dict:
+          container_name = container.get('name')
+          container_path = container.get('path')
+
         for idx, registry in enumerate(self.config.get('registries', [])):
             # by default tagged during build with registries[0]
-            if idx == 0:
-                continue
+            #if idx == 0:
+            #    continue
             tag = [
                 'docker',
                 'tag',
                 '-f',
                 image_id,
-                self.get_tag_prefix(idx) + container
+                self.get_registryhost_prefix(idx) + self.get_tag_prefix(idx) + container_name
             ]
 
             sys.stdout.write('%s\n' % ' '.join(tag))
@@ -173,6 +188,11 @@ class Builder(object):
         '''
         Push the container to the repositories
         '''
+        if type(container) is str:
+          container_name = container
+        elif type(container) is dict:
+          container_name = container.get('name')
+
         for idx, registry in enumerate(self.config.get('registries', [])):
             if registry.get('registry') != 'local':
                 # Need to login
@@ -195,7 +215,7 @@ class Builder(object):
             push = [
                 'docker',
                 'push',
-                self.get_tag_prefix(idx) + container
+                self.get_registryhost_prefix(idx) + self.get_tag_prefix(idx) + container_name
             ]
 
             sys.stdout.write('%s\n' % ' '.join(push))
@@ -212,7 +232,23 @@ class Builder(object):
         '''
         prefix = ''
         if len(self.config.get('registries', [])) > idx:
-            prefix = self.config.get('registries')[idx].get('username') +'/'
+            prefix = self.config.get('registries')[idx].get('account') +'/'
+        else:
+            sys.stderr.write('Invalid registry index (%s) - only %s registries defined\n'
+                % (idx, len(self.config.get('registries', []))))
+        return prefix
+
+    def get_registryhost_prefix(self, idx=0):
+        '''
+        Return the registryhost prefix depending on the list of registries defined in the config
+        '''
+        prefix = ''
+        if len(self.config.get('registries', [])) > idx:
+            prefix = self.config.get('registries')[idx].get('registryhost')
+            if prefix is not None:
+              prefix = prefix + '/'
+            else:
+              prefix = ""
         else:
             sys.stderr.write('Invalid registry index (%s) - only %s registries defined\n'
                 % (idx, len(self.config.get('registries', []))))
